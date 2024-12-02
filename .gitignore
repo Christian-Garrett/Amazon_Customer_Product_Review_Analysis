@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+scratch.ipynb
+Norm_Rating_Table.csv
+Top_Products.csv
+

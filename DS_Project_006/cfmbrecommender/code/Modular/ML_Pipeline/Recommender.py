@@ -1,130 +1,103 @@
 import pandas as pd
 import operator
 import random
-
 from sklearn.metrics.pairwise import cosine_similarity
 
 
+MAX_USERS = 100
+
+def create_norm_rating_table(self):
+
+    self.norm_rating_table = pd.pivot_table(self.filtered_data,
+                                           values='normalized_rating',
+                                           index='UserId',
+                                           columns='product')
+    
+    self.norm_rating_table.fillna(0, inplace=False)
 
 
-class Recommender:
+def prepare_input_data(self):
 
-    def __init__(self, data, filtered_ratings_data):
-
-        self.data = data
-        self.filtered_ratings_data = filtered_ratings_data
-        self.similarity_table = self.create_similarity_table()
-        self.curr_user = self.select_new_user()
+    self.norm_rating_table.set_index('UserId', inplace=True)
+    self.norm_rating_table = self.norm_rating_table.fillna(0)
 
 
-    def select_new_user(self):
+def select_random_user(self):
 
-        selecting_users = list(self.similarity_table.index)
-        selecting_users = selecting_users[:100]
-        rand_number = random.randrange(0,99,1)
-        user = selecting_users[rand_number]
-
-        return user
+    selecting_users = list(self.norm_rating_table.index)
+    selecting_users = selecting_users[:MAX_USERS]
+    rand_number = random.randrange(0, MAX_USERS-1, 1)
+    self.curr_userID = selecting_users[rand_number]
 
 
-    def create_similarity_table(self):
+def find_similar_users(self):
 
-        similarity = pd.pivot_table(self.filtered_ratings_data, values='normalized_rating',
-                                    index='UserId', columns='product')
-        similarity = similarity.fillna(0)
+    # create a dataframe of just the current user
+    user = \
+        self.norm_rating_table.loc[self.norm_rating_table.index == self.curr_userID]
 
-        return similarity
+    # and a dataframe of all other users
+    other_users = \
+        self.norm_rating_table.loc[self.norm_rating_table.index != self.curr_userID]
 
+    # calculate cosine similarity between user and each other user
+    cos_similarities = cosine_similarity(user, other_users)[0].tolist()
 
-    def get_similar_users(self, user_id, top_recs):
-        '''
-        :param user_id: the user we want to recommend
-        :param similarity_table: the user-item matrix
-        :return: Similar users to the user_id.
-        '''
+    other_user_index = other_users.index.tolist()
 
-        # create a dataframe of just the current user
-        user = self.similarity_table[self.similarity_table.index == user_id]
-        # and a dataframe of all other users
-        other_users = self.similarity_table[self.similarity_table.index != user_id]
-        # calculate cosine similarity between user and each other user
-        similarities = cosine_similarity(user, other_users)[0].tolist()
+    norm_rating_table_dict = dict(zip(other_user_index, cos_similarities))
 
-        indices = other_users.index.tolist()
-        index_similarity = dict(zip(indices, similarities))
+    # sort by similarity
+    norm_rating_table_dict_sorted = \
+        sorted(norm_rating_table_dict.items(), key=operator.itemgetter(1))
+    norm_rating_table_dict_sorted.reverse()
 
-        # sort by similarity
-        index_similarity_sorted = sorted(index_similarity.items(), key=operator.itemgetter(1))
-        index_similarity_sorted.reverse()
+    # take the top N users
+    most_similar_user_ratings = \
+        norm_rating_table_dict_sorted[:self.num_recommendations]
 
-        # take users
-        top_users_similarities = index_similarity_sorted[:top_recs]
-        users = []
-        for user in top_users_similarities:
-            users.append(user[0])
+    self.similar_user_list = [user[0] for user in most_similar_user_ratings]
 
-        return users
+def find_products(self):
 
+    # getting all similar users
+    similar_user_norm_ratings = \
+        self.norm_rating_table.loc[self.norm_rating_table.index.isin(self.similar_user_list)]
 
-    def get_products(self, user_id, similar_users, top_recommendations=5):
-        '''
-        :param user_id: user for whom we want to recommend
-        :param similar_users: top 5 similar users
-        :param similarity_table: the user-item matrix
-        :param top_recommendations: no. of recommendations
-        :return: top_x_recommended_products
-        '''
+    # getting mean ratings given for each users
+    similar_user_norm_means = similar_user_norm_ratings.mean(axis=0)
+    similar_user_norm_means_df = \
+        pd.DataFrame(similar_user_norm_means, columns=['mean'])
 
-        # taking the data for similar users
-        similar_user_products = self.data[self.data.UserId.isin(similar_users)]
+    # for the current user data
+    curr_user_norm_ratings_df = \
+        self.norm_rating_table.loc[self.norm_rating_table.index == self.curr_userID]
 
-        # getting all similar users
-        similar_users = self.similarity_table[self.similarity_table.index.isin(similar_users)]
+    # transpose it so its easier to filter
+    curr_user_norm_ratings_column = curr_user_norm_ratings_df.transpose()
 
-        #getting mean ratings given by users
-        similar_users = similar_users.mean(axis=0)
-        similar_users_df = pd.DataFrame(similar_users, columns=['mean'])
+    # rename the column as 'rating'
+    curr_user_norm_ratings_column.columns = ['rating']
 
-        # for the current user data
-        user_df = self.similarity_table[self.similarity_table.index == user_id]
+    # rows with a 0 value.
+    curr_user_unrated_products = \
+        curr_user_norm_ratings_column.loc[curr_user_norm_ratings_column['rating'] == 0]
 
-        # transpose it so its easier to filter
-        user_df_transposed = user_df.transpose()
+    # generate a list of products the user has not used
+    curr_user_unrated_product_list = \
+        curr_user_unrated_products.index.tolist()
 
-        # rename the column as 'rating'
-        user_df_transposed.columns = ['rating']
+    # find the products the current user has not rated in the similar user data
+    unrated_product_similar_user_data = \
+        similar_user_norm_means_df.loc[similar_user_norm_means_df.index.isin(curr_user_unrated_product_list)]
 
-        # rows with a 0 value.
-        user_df_transposed = user_df_transposed[user_df_transposed['rating'] == 0]
+    # order the dataframe
+    unrated_product_similar_user_data_sorted = \
+        unrated_product_similar_user_data.sort_values(by=['mean'], ascending=False)
 
-        # generate a list of products the user has not used
-        products_not_rated = user_df_transposed.index.tolist()
+    # take the top products
+    top_similar_user_products = \
+        unrated_product_similar_user_data_sorted.head(self.num_recommendations)
 
-        # filter avg ratings of similar users for only products the current user has not rated
-        similar_users_df_filtered = similar_users_df[similar_users_df.index.isin(products_not_rated)]
-
-        # order the dataframe
-        similar_users_df_ordered = similar_users_df_filtered.sort_values(by=['mean'], ascending=False)
-
-        # take the top products
-        top_products = similar_users_df_ordered.head(top_recommendations)
-        top_products_indices = top_products.index.tolist()
-
-        return top_products_indices
-
-
-    def get_customer(self):
-        return self.curr_user
-
-
-    def get_recommendations(self, curr_user, num_recs=5):
-
-        similar_users = self.get_similar_users(curr_user, num_recs)
-        recommended_products_indices = self.get_products(curr_user, similar_users, num_recs)
-
-        return similar_users, recommended_products_indices
-
-
-
-
-
+    self.recommendataion_list = \
+        top_similar_user_products.index.tolist()

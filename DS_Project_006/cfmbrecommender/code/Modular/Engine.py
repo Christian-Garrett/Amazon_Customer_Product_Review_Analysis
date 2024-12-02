@@ -1,34 +1,14 @@
-from cfmbrecommender.code.Modular.ML_Pipeline.EDA import EDA
-from cfmbrecommender.code.Modular.ML_Pipeline.Preprocess import Preprocess
-from cfmbrecommender.code.Modular.ML_Pipeline.Recommender import Recommender
+from pathlib import Path
+import sys
+
+module_path = Path(__file__).parents[0]
+sys.path.append(str(module_path))
+
+from ML_Pipeline import DataPipeline
 
 
+dp_object = DataPipeline()
 
-
-file = 'cfmbrecommender/code/Modular/Input/ratings_Beauty.csv'
-low_rating_threshold = 200
-
-
-def run():
-
-    raw_data = EDA(file)
-
-    explored_data_df = raw_data.get_data()
-
-    ratings = Preprocess(explored_data_df, low_rating_threshold)
-
-    encoded_ratings_df = ratings.get_data()
-
-    matrix = Recommender(explored_data_df, encoded_ratings_df)
-
-    new_customer = matrix.get_customer()
-
-    similar_users, recommendation_indices = matrix.get_recommendations(new_customer)
-
-    
-
-
-
-run()
-
-
+dp_object.perform_EDA()
+dp_object.preprocess_data()
+dp_object.build_recommendation_engine()
